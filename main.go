@@ -2,7 +2,7 @@ package main
 
 import (
     "net/http"
-      "errors"
+    "errors"
 
     "github.com/gin-gonic/gin"
 )
@@ -39,18 +39,56 @@ func getBooks(c *gin.Context) {
     c.IndentedJSON(http.StatusOK, books)
 }
 
-func bookById(c *gin.Context){
-	id := c.Param("id")
+func bookById(c *gin.Context) {
+    id := c.Param("id")
     book, err := getBookById(id)
-    if err!= nil {
-		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "Book not found"})
+    if err != nil {
+        c.IndentedJSON(http.StatusNotFound, gin.H{"message": "Book not found"})
         return
     }
     c.IndentedJSON(http.StatusOK, book)
 }
 
-func getBookById(id string) (*book,error){
-	for i, b := range books {
+func checkoutBook(c *gin.Context) {
+    id, ok := c.GetQuery("id")
+    if !ok {
+        c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "ID parameter is required"})
+        return
+    }
+    book, err := getBookById(id)
+    if err != nil {
+        c.IndentedJSON(http.StatusNotFound, gin.H{"message": "Book not found"})
+        return
+    }
+    if book.Quantity <= 0 {
+        c.IndentedJSON(http.StatusConflict, gin.H{"message": "Book out of stock"})
+        return
+    }
+    book.Quantity -= 1
+    c.IndentedJSON(http.StatusOK, book)
+}
+
+func  returnBook(c *gin.Context){
+	id, ok := c.GetQuery("id")
+    if !ok {
+        c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "ID parameter is required"})
+        return
+    }
+    book, err := getBookById(id)
+    if err != nil {
+        c.IndentedJSON(http.StatusNotFound, gin.H{"message": "Book not found"})
+        return
+    }
+    if book.Quantity < 0 {
+        c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "Book quantity cannot be negative"})
+        return
+    }
+    book.Quantity += 1
+    c.IndentedJSON(http.StatusOK, book)
+}
+
+func getBookById(id string) (*book, error) {
+    for i, b := range books {
         if b.ID == id {
             return &books[i], nil
         }
@@ -58,9 +96,10 @@ func getBookById(id string) (*book,error){
     return nil, errors.New("book not found")
 }
 
-func createBook(c *gin.Context){
-	var newBook book
-    if err := c.BindJSON(&newBook); err!= nil {
+func createBook(c *gin.Context) {
+    var newBook book
+    if err := c.BindJSON(&newBook); err != nil {
+        c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "Invalid request"})
         return
     }
 
@@ -72,7 +111,9 @@ func main() {
     router := gin.Default()
 
     router.GET("/books", getBooks)
-	router.POST("/books", createBook)
-	router.GET("/books/:id", bookById)
+    router.POST("/books", createBook)
+    router.PATCH("/checkout", checkoutBook)
+    router.GET("/books/:id", bookById)
+
     router.Run("localhost:8080")
 }
